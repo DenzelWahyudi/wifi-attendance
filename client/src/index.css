@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+@theme {
+    --font-sans: "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+    --font-serif: Georgia, "Times New Roman", serif;
+
+    --color-wine: #861b35;
+    --color-wine-dark: #67132a;
+    --color-ink: #2a2930;
+    --color-canvas: #f8f8fa;
+    --color-cream: #f9f7f3;
+    --color-line: #e9e7eb;
+
+    --breakpoint-*: initial;
+    --breakpoint-xs: 24.4375rem;
+    --breakpoint-md: 43.8125rem;
+    --breakpoint-lg: 56.3125rem;
+    --breakpoint-xl: 73.8125rem;
+    --breakpoint-2xl: 103.125rem;
+
+    --shadow-card: 0 12px 36px #46342c07, 0 2px 5px #46342c02;
+    --animate-enter: enter 0.3s ease-out both;
+
+    @keyframes enter {
+        from {
+            opacity: 0;
+            transform: translateY(9px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+}
