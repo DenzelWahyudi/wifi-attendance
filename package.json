@@ -1,0 +1,12 @@
+{
+    "name": "wifi-attendance",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "postinstall": "npm --prefix server install && npm --prefix client install",
+        "start": "concurrently --kill-others --names server,client \"npm --prefix server start\" \"npm --prefix client run dev -- --host\""
+    },
+    "devDependencies": {
+        "concurrently": "^10.0.5"
+    }
+}

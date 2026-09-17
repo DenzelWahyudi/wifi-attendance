@@ -13,12 +13,12 @@ async function start() {
     const password = process.env.ADMIN_PASSWORD
     if (
         !password ||
-        password.length < 12 ||
+        password.length < 8 ||
         password.length > 256 ||
         password === "replace-with-your-own-password"
     ) {
         throw new Error(
-            "Set ADMIN_PASSWORD to your own password of 12–256 characters in server/.env."
+            "Set ADMIN_PASSWORD to your own password of 8–256 characters in server/.env."
         )
     }
     if (!process.env.PGHOST || !process.env.PGDATABASE || !process.env.PGUSER) {

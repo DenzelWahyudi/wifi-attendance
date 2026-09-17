@@ -51,33 +51,33 @@ PORT=3000
 COOKIE_SECURE=false
 ```
 
-Set `ADMIN_PASSWORD` to your own password of 12–256 characters. The placeholder does not enable a login. The password and database settings remain on the server; `.env` is excluded from version control. Restart the API after changing it. Quote values containing `#` or spaces, for example `PGPASSWORD="example#with spaces"`.
+Set `ADMIN_PASSWORD` to your own password of 8–256 characters. The placeholder does not enable a login. The password and database settings remain on the server; `.env` is excluded from version control. Restart the API after changing it. Quote values containing `#` or spaces, for example `PGPASSWORD="example#with spaces"`.
 
 Admin sessions use an HTTP-only, SameSite cookie and expire after eight hours. Signing out or restarting the API invalidates them. `COOKIE_SECURE=false` supports local HTTP; use `true` only with HTTPS.
 
-## Run the client and server separately
+## Run the project
 
-No combined launcher or router/network setup is included.
-
-Terminal 1, from the project directory:
+Install dependencies once from the project directory:
 
 ```powershell
-cd server
 npm install
-npm run dev
 ```
 
-Terminal 2, from the project directory:
+This installs dependencies for the root launcher, server, and client automatically.
+
+Start both the API and client with one command from the project directory:
 
 ```powershell
-cd client
-npm install
-npm run dev
+npm start
 ```
 
-Open the URL printed by Vite, normally `http://localhost:5173`. Open `/admin` to register students first.
+This runs `npm start` in `server` and `npm run dev -- --host` in `client`, with labeled output in the same terminal. Press `Ctrl+C` to stop both. If either process exits, the launcher stops the other as well.
 
-The client sends requests to `/api`, which Vite proxies to `http://localhost:3000`. The API binds to `localhost` on the laptop. If you change the API's `PORT`, update the proxy target in `client/vite.config.ts` too. API and client use separate commands, and no PostgreSQL service settings or firewall rules are changed by the application.
+Open the URL printed by Vite, normally `http://localhost:5173`. The client also listens on the network through `--host`; use Vite's Network URL from other devices on the same network. Open `/admin` to register students first.
+
+To run each app in a separate terminal, use `npm --prefix server start` and `npm --prefix client run dev -- --host` from the project directory. Use `npm --prefix server run dev` when you want the API to restart automatically after code changes.
+
+The client sends requests to `/api`, which Vite proxies to `http://localhost:3000`. The API binds to `localhost` on the laptop. If you change the API's `PORT`, update the proxy target in `client/vite.config.ts` too. No PostgreSQL service settings or firewall rules are changed by the application.
 
 If the database is unreachable or the schema has not been installed, the API prints a setup error. The website shows a connection error and allows retrying. Attendance timestamps come from PostgreSQL and are displayed in each browser's local time zone. Nothing resets automatically at midnight.
 
