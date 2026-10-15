@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { twMerge } from "tailwind-merge"
+import untarLogo from "../assets/untarTransparent.png"
 
 const paths: Record<string, ReactNode> = {
     arrow: (
@@ -173,15 +174,11 @@ export function Brand({ compact = false }: { compact?: boolean }) {
                         : "block w-[31px] shrink-0 md:w-[38px]"
                 }
             >
-                <svg className="h-11 w-full" viewBox="0 0 40 46" fill="none" aria-hidden="true">
-                    <path d="m20 2 17 6v20L20 43 3 28V8Z" stroke="currentColor" strokeWidth="1.7" />
-                    <path
-                        d="M12 13v12a8 8 0 0 0 16 0V13M9 13h6m10 0h6M17 9h6"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                    />
-                    <path d="m14 35 6 5 6-5" stroke="currentColor" />
-                </svg>
+                <img
+                    src={untarLogo}
+                    alt="UNTAR logo"
+                    className="h-auto w-full object-contain"
+                />
             </span>
             <span>
                 <strong
