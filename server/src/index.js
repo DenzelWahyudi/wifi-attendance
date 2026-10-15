@@ -28,7 +28,9 @@ async function start() {
     pool.on("error", (error) => console.error("PostgreSQL connection error:", error.message))
     try {
         const { rowCount } = await pool.query("SELECT id FROM attendance_state WHERE id = 1")
-        await pool.query("SELECT identity_number, name, attended_at FROM students LIMIT 0")
+        await pool.query("ALTER TABLE students ADD COLUMN IF NOT EXISTS device_id VARCHAR(64)")
+        await pool.query("ALTER TABLE students ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)")
+        await pool.query("SELECT identity_number, name, attended_at, device_id, ip_address FROM students LIMIT 0")
         if (rowCount !== 1)
             throw new Error("Attendance state is missing. Run db.sql in your database.")
     } catch (error) {
@@ -43,6 +45,16 @@ async function start() {
     const port = Number(process.env.PORT || 3000)
     const server = app.listen(port, "localhost", () => {
         console.log(`Attendance API ready at http://localhost:${port}`)
+    })
+    server.on("error", (error) => {
+        if (error.code === "EADDRINUSE") {
+            console.error(
+                `Port ${port} is already in use by another process. Please stop existing Node instances.`
+            )
+        } else {
+            console.error(`Server error: ${error.message}`)
+        }
+        process.exit(1)
     })
     const stop = () => server.close(() => pool.end().then(() => process.exit(0)))
     process.once("SIGINT", stop)

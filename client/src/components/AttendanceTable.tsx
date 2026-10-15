@@ -182,7 +182,7 @@ export function AttendanceTable({
                 </InputGroup>
             </div>
             <div className="overflow-x-auto">
-                <table className="w-full table-fixed border-collapse text-left md:min-w-[670px] md:table-auto">
+                <table className="w-full table-fixed border-collapse text-left md:min-w-[760px] md:table-auto">
                     <caption className="sr-only">
                         Students and their attendance for the current session
                     </caption>
@@ -205,6 +205,9 @@ export function AttendanceTable({
                             <th className={headingCell}>ATTENDANCE STATUS</th>
                             <th className={twMerge(headingCell, "hidden md:table-cell")}>
                                 CHECK-IN TIME
+                            </th>
+                            <th className={twMerge(headingCell, "hidden lg:table-cell")}>
+                                DEVICE / IP
                             </th>
                         </tr>
                     </thead>
@@ -273,6 +276,22 @@ export function AttendanceTable({
                                             <small className="mt-1 block pl-[19px] text-[9px] text-[#b2a3ba]">
                                                 {formatDate(student.attendedAt, true)}
                                             </small>
+                                        </div>
+                                    ) : (
+                                        <span className="text-sm text-[#c7baca]">—</span>
+                                    )}
+                                </td>
+                                <td className={twMerge(bodyCell, "hidden lg:table-cell")}>
+                                    {student.attendedAt ? (
+                                        <div className="leading-tight">
+                                            <span className="font-mono text-xs text-[#796786] tabular-nums">
+                                                {student.ipAddress || "—"}
+                                            </span>
+                                            {student.deviceId && (
+                                                <small className="mt-1 block font-mono text-[9px] text-[#b2a3ba]">
+                                                    ID: {student.deviceId.slice(0, 8)}…
+                                                </small>
+                                            )}
                                         </div>
                                     ) : (
                                         <span className="text-sm text-[#c7baca]">—</span>

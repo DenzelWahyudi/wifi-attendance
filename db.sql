@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS students (
     identity_number VARCHAR(32) NOT NULL UNIQUE
         CHECK (identity_number ~ '^[A-Za-z0-9-]{1,32}$'),
     attended_at TIMESTAMPTZ,
+    device_id VARCHAR(64),
+    ip_address VARCHAR(45),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

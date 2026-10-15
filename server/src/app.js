@@ -4,13 +4,32 @@ const { rateLimit } = require("express-rate-limit")
 
 const SESSION_MS = 8 * 60 * 60 * 1000
 const COOKIE = "attendance_admin"
-const studentColumns = 'id, name, identity_number AS "identityNumber", attended_at AS "attendedAt"'
+const studentColumns =
+    'id, name, identity_number AS "identityNumber", attended_at AS "attendedAt", device_id AS "deviceId", ip_address AS "ipAddress"'
 const hash = (value) => createHash("sha256").update(value).digest()
 const validIdentity = (value) =>
     typeof value === "string" && /^[A-Za-z0-9-]{1,32}$/.test(value.trim())
+const validDeviceId = (value) =>
+    typeof value === "string" && /^[A-Za-z0-9-]{16,64}$/.test(value.trim())
+
+function getClientIp(req) {
+    let ip = req.ip || req.socket?.remoteAddress || ""
+    if (ip.startsWith("::ffff:")) {
+        ip = ip.slice(7)
+    }
+    return ip.trim()
+}
+
+const isLoopbackIp = (ip) =>
+    !ip || ip === "127.0.0.1" || ip === "::1" || ip === "localhost"
+
+const isMobileUserAgent = (ua) =>
+    typeof ua === "string" &&
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua)
 
 function createApp({ pool, adminPassword, secureCookies = false }) {
     const app = express()
+    app.set("trust proxy", true)
     const sessions = new Map()
     const passwordHash = hash(adminPassword)
     const cookieOptions = {
@@ -143,11 +162,28 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
 
     app.post("/api/attendance", attendanceLimiter, async (req, res) => {
         const identity = req.body?.identityNumber
+        const deviceId = req.body?.deviceId
         if (!validIdentity(identity)) {
             return res.status(400).json({
                 error: "Enter a valid identity number using letters, numbers, or hyphens."
             })
         }
+        if (!validDeviceId(deviceId)) {
+            return res.status(400).json({
+                error: "Invalid device identification. Please reload the page."
+            })
+        }
+        const clientIp = getClientIp(req)
+        const isLoopback = isLoopbackIp(clientIp)
+        const userAgent = req.get("user-agent") || ""
+        if (!isMobileUserAgent(userAgent) && !isLoopback) {
+            return res.status(403).json({
+                error: "Attendance can only be recorded from a mobile device."
+            })
+        }
+        const trimmedIdentity = identity.trim()
+        const trimmedDeviceId = deviceId.trim()
+
         const client = await pool.connect()
         try {
             await client.query("BEGIN")
@@ -155,8 +191,8 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
             // to either the old session or the new one.
             await client.query("SELECT id FROM attendance_state WHERE id = 1 FOR SHARE")
             const { rows } = await client.query(
-                'SELECT name, attended_at AS "attendedAt" FROM students WHERE identity_number = $1 FOR UPDATE',
-                [identity.trim()]
+                'SELECT id, name, attended_at AS "attendedAt", device_id AS "deviceId", ip_address AS "ipAddress" FROM students WHERE identity_number = $1 FOR UPDATE',
+                [trimmedIdentity]
             )
             if (!rows[0]) {
                 await client.query("ROLLBACK")
@@ -167,9 +203,24 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
             const alreadyAttended = rows[0].attendedAt !== null
             let attendedAt = rows[0].attendedAt
             if (!alreadyAttended) {
+                const conflictQuery = isLoopback
+                    ? "SELECT name FROM students WHERE attended_at IS NOT NULL AND device_id = $1 AND identity_number != $2 LIMIT 1"
+                    : "SELECT name FROM students WHERE attended_at IS NOT NULL AND (device_id = $1 OR (ip_address IS NOT NULL AND ip_address = $2)) AND identity_number != $3 LIMIT 1"
+                const conflictParams = isLoopback
+                    ? [trimmedDeviceId, trimmedIdentity]
+                    : [trimmedDeviceId, clientIp, trimmedIdentity]
+
+                const conflictCheck = await client.query(conflictQuery, conflictParams)
+                if (conflictCheck.rows.length > 0) {
+                    await client.query("ROLLBACK")
+                    return res.status(409).json({
+                        error: "This device has already been used to check in for this session."
+                    })
+                }
+
                 const result = await client.query(
-                    "UPDATE students SET attended_at = clock_timestamp() WHERE identity_number = $1 RETURNING attended_at",
-                    [identity.trim()]
+                    "UPDATE students SET attended_at = clock_timestamp(), device_id = $2, ip_address = $3 WHERE identity_number = $1 RETURNING attended_at",
+                    [trimmedIdentity, trimmedDeviceId, clientIp || null]
                 )
                 attendedAt = result.rows[0].attended_at
             }
@@ -191,7 +242,7 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
             await client.query("BEGIN")
             await client.query("SELECT id FROM attendance_state WHERE id = 1 FOR UPDATE")
             await client.query(
-                "UPDATE students SET attended_at = NULL WHERE attended_at IS NOT NULL"
+                "UPDATE students SET attended_at = NULL, device_id = NULL, ip_address = NULL WHERE attended_at IS NOT NULL"
             )
             const { rows } = await client.query(
                 'UPDATE attendance_state SET started_at = clock_timestamp() WHERE id = 1 RETURNING started_at AS "startedAt"'

@@ -122,6 +122,12 @@ const paths: Record<string, ReactNode> = {
         <>
             <path d="M4 3v17h17M8 15v-4m5 4V6m5 9v-7" />
         </>
+    ),
+    smartphone: (
+        <>
+            <rect x="5" y="2" width="14" height="20" rx="3" />
+            <path d="M12 18h.01" />
+        </>
     )
 }
 

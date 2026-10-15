@@ -39,6 +39,8 @@ export type Student = {
     name: string
     identityNumber: string
     attendedAt: string | null
+    deviceId?: string | null
+    ipAddress?: string | null
 }
 export type AttendanceData = { startedAt: string; students: Student[] }
 export type AttendanceReceipt = { name: string; attendedAt: string; alreadyAttended: boolean }
