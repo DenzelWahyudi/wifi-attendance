@@ -351,6 +351,7 @@ export default function StudentPage() {
                                 <Input
                                     id="student-identity"
                                     name="identityNumber"
+                                    className="text-base"
                                     placeholder="e.g. 535260001"
                                     value={identity}
                                     onChange={(event) => setIdentity(event.target.value)}
