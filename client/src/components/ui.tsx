@@ -100,18 +100,39 @@ export function FormIcon({ name, className }: { name: string; className?: string
     )
 }
 
-export function AttendanceBadge({ present }: { present: boolean }) {
+export function AttendanceBadge({
+    present,
+    status
+}: {
+    present?: boolean
+    status?: "verified" | "present" | "unverified" | "not_attended"
+}) {
+    const finalStatus =
+        status ?? (present ? "present" : "not_attended")
+
+    const styles = {
+        verified: "border-[#dcebe1] bg-[#eaf5ee] text-[#33755d]",
+        present: "border-[#dcebe1] bg-[#eaf5ee] text-[#33755d]",
+        unverified: "border-[#f5d5db] bg-[#fbf0f2] text-[#ab334b]",
+        not_attended: "border-[#f3e9d5] bg-[#fcf5e7] text-[#9a752f]"
+    }
+
+    const labels = {
+        verified: "Verified",
+        present: "Present",
+        unverified: "Unverified / Left",
+        not_attended: "Not attended"
+    }
+
     return (
         <span
             className={twMerge(
                 "inline-flex items-center gap-1.5 rounded-[5px] border px-[7px] py-[5px] text-[10px] font-semibold whitespace-nowrap md:px-[9px] md:text-xs",
-                present
-                    ? "border-[#dcebe1] bg-[#eaf5ee] text-[#33755d]"
-                    : "border-[#f3e9d5] bg-[#fcf5e7] text-[#9a752f]"
+                styles[finalStatus]
             )}
         >
             <span className="size-[5px] rounded-full bg-current" />
-            {present ? "Present" : "Not attended"}
+            {labels[finalStatus]}
         </span>
     )
 }

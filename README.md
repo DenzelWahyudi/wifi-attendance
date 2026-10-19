@@ -1,44 +1,93 @@
 # UNTAR Attendance
 
-A student check-in page and a password-protected administrator dashboard, built with React, TypeScript, Tailwind CSS, Express, and PostgreSQL.
+A local-first student attendance and verification system featuring a mobile student check-in portal and a password-protected administrator dashboard. Built with React 19, TypeScript, Tailwind CSS v4, Express 5, and PostgreSQL.
 
-- `/` — enter a registered identity number and press **Attend**.
-- `/admin` — sign in, add students, search and filter attendance, and reset the session.
-- The dashboard refreshes every five seconds while visible.
-- Check-ins are saved in PostgreSQL. Repeated submissions keep the original timestamp.
-- **Present** means the student has checked in. **Not attended** means they have not checked in during the current session.
-- Sessions continue until an administrator explicitly resets them. Reset clears check-ins and starts a new session; it keeps all registered names and identity numbers. Previous attendance history is not retained.
-- Identity numbers are stored as text, preserving leading zeroes. They are case-sensitive and accept 1–32 letters, digits, or hyphens.
-- Assets, illustrations, and system fonts are local. Once dependencies are installed, the application does not need an internet connection.
+---
 
-## Database setup
+## Key Features
 
-Requirements: Node.js 24 and PostgreSQL. The schema has been checked with PostgreSQL 18.
+### Student Check-In (`/`)
+- **Fast Attendance**: Students enter their registered identity number and tap **Attend**.
+- **Mobile-Only Restriction**: Enforces check-in from mobile devices via user-agent, touch, and viewport verification (bypassed on loopback for local development).
+- **Anti-Proxy & Device Binding**:
+  - Assigns a persistent device identifier stored across `localStorage` and HTTP cookies.
+  - Prevents proxy attendance: a device or IP address can only check in for one student per session.
+- **Instant Attendance Receipt**: Displays exact submission timestamp and real-time session verification status.
 
-Open your PostgreSQL terminal:
+### Pop Check-In & Presence Verification
+- **Mid-Session Verification**: Admins can launch timed pop check-ins during lectures to verify that students who checked in are still physically in the room.
+- **Two Verification Methods**:
+  - **4-Digit PIN**: Generates a random 4-digit code on the admin screen for students to enter on their devices.
+  - **One-Tap Confirmation**: Students tap a confirmation button on their device within the active window.
+- **Device-Matched Verification**: Verifications must originate from the exact same device that submitted the initial check-in.
+- **Configurable Timers**: 60-second, 2-minute, or 3-minute windows with live countdown and early termination controls.
+- **Smart Status Categorization**:
+  - **Verified**: Checked in and successfully verified during the active cycle.
+  - **Unverified / Left Early**: Checked in initially but missed the pop check-in window.
+  - **Present**: Checked in (prior to any verification cycles or while a cycle is in progress).
+  - **Not attended**: Has not checked in during the current session.
 
-```powershell
-psql -U postgres
-```
+### Administrator Dashboard (`/admin`)
+- **Password-Protected & Rate-Limited**: Authenticated using HTTP-only, SameSite cookies with brute-force protection (10 attempts per 15 minutes).
+- **Live Sync**: Automatically polls and updates attendance statistics every 5 seconds (pauses when the tab is inactive).
+- **Student Roster Management**: Add new students with name and identity number (supports alphanumeric IDs, hyphens, and preserves leading zeroes).
+- **Search & Filters**: Filter by status (*All*, *Verified*, *Unverified / Left*, *Not attended*) and live search by name or ID.
+- **Session Control**: One-click session reset clears all check-in and verification timestamps while preserving enrolled students.
 
-Create and select the database:
+### Local-First & Offline-Ready
+- **Zero External Runtime Dependencies**: All fonts, icons, illustrations, and assets are bundled locally. Once dependencies are installed, the entire system runs on a local Wi-Fi or LAN without requiring an internet connection.
 
-```sql
-CREATE DATABASE wifi_attendance;
-\connect wifi_attendance
-```
+---
 
-Paste the contents of **`db.sql`** into that terminal, or load the file:
+## Tech Stack
 
-```sql
-\i 'C:/Users/denze/Downloads/wifi-attendance/db.sql'
-```
+- **Frontend**: React 19, TypeScript, Vite 8, Tailwind CSS v4, React Router 7, React Compiler
+- **Backend**: Node.js 24, Express 5, `pg` (node-postgres), Express Rate Limit
+- **Database**: PostgreSQL (tested on PostgreSQL 18)
+- **Launcher**: Concurrently for running client and server simultaneously
 
-The SQL creates two tables, `students` and `attendance_state`. Rerunning it preserves existing registrations and attendance. It does not insert sample students or create a database automatically.
+---
+
+## Database Setup
+
+### Requirements
+- **Node.js 24+** (utilizes native `loadEnvFile` and `node:crypto`)
+- **PostgreSQL**
+
+### Initialization
+
+1. Open your PostgreSQL terminal:
+   ```powershell
+   psql -U postgres
+   ```
+
+2. Create and connect to the database:
+   ```sql
+   CREATE DATABASE wifi_attendance;
+   \connect wifi_attendance
+   ```
+
+3. Execute the database schema from the project root:
+   ```sql
+   \i 'db.sql'
+   ```
+   *(Or copy and paste the contents of `db.sql` directly into your psql terminal).*
+
+The script creates two tables:
+- `students`: Stores student names, identity numbers, attendance timestamps, verification timestamps, device IDs, and IP addresses.
+- `attendance_state`: Stores the session start time, active verification method, PIN, countdown timestamps, and cycle counter.
+
+---
 
 ## Configuration
 
-Fill in **`server/.env`**. A copy of the placeholders is provided in **`server/.env.example`**.
+Copy the example environment file to `server/.env`:
+
+```powershell
+Copy-Item server/.env.example server/.env
+```
+
+Configure `server/.env` with your PostgreSQL credentials and admin password:
 
 ```dotenv
 PGHOST=localhost
@@ -46,54 +95,59 @@ PGPORT=5432
 PGDATABASE=wifi_attendance
 PGUSER=postgres
 PGPASSWORD=your-database-password
-ADMIN_PASSWORD=replace-with-your-own-password
+
+# Set your administrator password (8–256 characters)
+ADMIN_PASSWORD=your-secure-password
+
 PORT=3000
+# Set to false for local HTTP. Set to true only behind HTTPS.
 COOKIE_SECURE=false
 ```
 
-Set `ADMIN_PASSWORD` to your own password of 8–256 characters. The placeholder does not enable a login. The password and database settings remain on the server; `.env` is excluded from version control. Restart the API after changing it. Quote values containing `#` or spaces, for example `PGPASSWORD="example#with spaces"`.
+> **Note**: Quote any values containing spaces or `#`, e.g. `PGPASSWORD="my#password"`.
 
-Admin sessions use an HTTP-only, SameSite cookie and expire after eight hours. Signing out or restarting the API invalidates them. `COOKIE_SECURE=false` supports local HTTP; use `true` only with HTTPS.
+---
 
-## Run the project
+## Running the Application
 
-Install dependencies once from the project directory:
+### 1. Install Dependencies
+
+Install all dependencies for root, server, and client with a single command:
 
 ```powershell
 npm install
 ```
 
-This installs dependencies for the root launcher, server, and client automatically.
+### 2. Start the Development Server
 
-Start both the API and client with one command from the project directory:
+Start both the backend API and frontend Vite server together:
 
 ```powershell
 npm start
 ```
 
-This runs `npm start` in `server` and `npm run dev -- --host` in `client`, with labeled output in the same terminal. Press `Ctrl+C` to stop both. If either process exits, the launcher stops the other as well.
+- **Student Check-In**: `http://localhost:5173`
+- **Admin Portal**: `http://localhost:5173/admin`
+- **Backend API**: `http://localhost:3000/api`
 
-Open the URL printed by Vite, normally `http://localhost:5173`. The client also listens on the network through `--host`; use Vite's Network URL from other devices on the same network. Open `/admin` to register students first.
+### 3. Local Wi-Fi / Classroom Access
 
-To run each app in a separate terminal, use `npm --prefix server start` and `npm --prefix client run dev -- --host` from the project directory. Use `npm --prefix server run dev` when you want the API to restart automatically after code changes.
+To allow students to access the portal from their mobile devices over the local Wi-Fi network:
+1. Ensure the host laptop and student mobile devices are connected to the same Wi-Fi network.
+2. Note the **Network URL** output by Vite upon starting (e.g., `http://192.168.1.X:5173`).
+3. Share this URL or display a QR code pointing to it for students to scan and check in.
 
-The client sends requests to `/api`, which Vite proxies to `http://localhost:3000`. The API binds to `localhost` on the laptop. If you change the API's `PORT`, update the proxy target in `client/vite.config.ts` too. No PostgreSQL service settings or firewall rules are changed by the application.
+---
 
-If the database is unreachable or the schema has not been installed, the API prints a setup error. The website shows a connection error and allows retrying. Attendance timestamps come from PostgreSQL and are displayed in each browser's local time zone. Nothing resets automatically at midnight.
+## Scripts & Checks
 
-## Styling
-
-Pages and components use Tailwind CSS utilities, including responsive layouts, focus states, and reduced-motion variants. Shared buttons, fields, and status badges are in `client/src/components/ui.tsx`.
-
-`client/src/index.css` contains only the Tailwind import and theme settings for colors, fonts, breakpoints, shadows, and the entry animation. Change the theme there to adjust the shared design.
-
-## Checks
+From the project root:
+- `npm start`: Runs both backend and frontend concurrently.
 
 From `client`:
+- `npm run build`: Type-checks and builds the production bundle (`tsc -b && vite build`).
+- `npm run lint`: Runs ESLint across the frontend codebase.
 
-```powershell
-npm run build
-npm run lint
-```
-
-# wifi-attendance
+From `server`:
+- `npm run dev`: Runs the backend with Node's file watcher (`node --watch src/index.js`).
+- `npm start`: Runs the backend in production mode.

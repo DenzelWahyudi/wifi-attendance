@@ -5,7 +5,7 @@ const { rateLimit } = require("express-rate-limit")
 const SESSION_MS = 8 * 60 * 60 * 1000
 const COOKIE = "attendance_admin"
 const studentColumns =
-    'id, name, identity_number AS "identityNumber", attended_at AS "attendedAt", device_id AS "deviceId", ip_address AS "ipAddress"'
+    'id, name, identity_number AS "identityNumber", attended_at AS "attendedAt", verified_at AS "verifiedAt", device_id AS "deviceId", ip_address AS "ipAddress"'
 const hash = (value) => createHash("sha256").update(value).digest()
 const validIdentity = (value) =>
     typeof value === "string" && /^[A-Za-z0-9-]{1,32}$/.test(value.trim())
@@ -123,12 +123,77 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
     app.get("/api/admin/students", requireAdmin, async (req, res) => {
         const { rows } = await pool.query(`
       SELECT started_at AS "startedAt",
+        verification_type AS "verificationType",
+        verification_pin AS "verificationPin",
+        verification_started_at AS "verificationStartedAt",
+        verification_expires_at AS "verificationExpiresAt",
+        verification_cycle_count AS "verificationCycleCount",
+        (verification_expires_at IS NOT NULL AND verification_expires_at > clock_timestamp()) AS "verificationActive",
+        GREATEST(0, ROUND(EXTRACT(EPOCH FROM (verification_expires_at - clock_timestamp()))))::integer AS "verificationRemainingSeconds",
         (SELECT COALESCE(json_agg(student_list), '[]'::json)
          FROM (SELECT ${studentColumns} FROM students ORDER BY lower(name), identity_number) student_list) AS students
       FROM attendance_state WHERE id = 1
     `)
         if (!rows[0]) throw new Error("Attendance state is missing.")
         res.json(rows[0])
+    })
+
+    app.post("/api/admin/verification/start", requireAdmin, async (req, res) => {
+        const type = req.body?.type === "pin" ? "pin" : "tap"
+        const durationSeconds = Math.max(30, Math.min(600, Number(req.body?.durationSeconds) || 120))
+        let pin = null
+        if (type === "pin") {
+            pin = Math.floor(1000 + Math.random() * 9000).toString()
+        }
+        const client = await pool.connect()
+        try {
+            await client.query("BEGIN")
+            // Reset previous cycle's verified_at for a new cycle
+            await client.query("UPDATE students SET verified_at = NULL WHERE attended_at IS NOT NULL")
+            const { rows } = await client.query(
+                `UPDATE attendance_state
+                 SET verification_type = $1,
+                     verification_pin = $2,
+                     verification_started_at = clock_timestamp(),
+                     verification_expires_at = clock_timestamp() + ($3 || ' seconds')::interval,
+                     verification_cycle_count = verification_cycle_count + 1
+                 WHERE id = 1
+                 RETURNING verification_type AS "verificationType",
+                           verification_pin AS "verificationPin",
+                           verification_started_at AS "verificationStartedAt",
+                           verification_expires_at AS "verificationExpiresAt",
+                           verification_cycle_count AS "verificationCycleCount"`,
+                [type, pin, durationSeconds]
+            )
+            await client.query("COMMIT")
+            res.json({
+                ...rows[0],
+                verificationActive: true,
+                verificationRemainingSeconds: durationSeconds
+            })
+        } catch (error) {
+            await client.query("ROLLBACK")
+            throw error
+        } finally {
+            client.release()
+        }
+    })
+
+    app.post("/api/admin/verification/stop", requireAdmin, async (req, res) => {
+        const { rows } = await pool.query(
+            `UPDATE attendance_state
+             SET verification_expires_at = clock_timestamp()
+             WHERE id = 1
+             RETURNING verification_type AS "verificationType",
+                       verification_started_at AS "verificationStartedAt",
+                       verification_expires_at AS "verificationExpiresAt",
+                       verification_cycle_count AS "verificationCycleCount"`
+        )
+        res.json({
+            ...rows[0],
+            verificationActive: false,
+            verificationRemainingSeconds: 0
+        })
     })
 
     app.post("/api/admin/students", requireAdmin, async (req, res) => {
@@ -191,7 +256,7 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
             // to either the old session or the new one.
             await client.query("SELECT id FROM attendance_state WHERE id = 1 FOR SHARE")
             const { rows } = await client.query(
-                'SELECT id, name, attended_at AS "attendedAt", device_id AS "deviceId", ip_address AS "ipAddress" FROM students WHERE identity_number = $1 FOR UPDATE',
+                'SELECT id, name, attended_at AS "attendedAt", verified_at AS "verifiedAt", device_id AS "deviceId", ip_address AS "ipAddress" FROM students WHERE identity_number = $1 FOR UPDATE',
                 [trimmedIdentity]
             )
             if (!rows[0]) {
@@ -202,6 +267,7 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
             }
             const alreadyAttended = rows[0].attendedAt !== null
             let attendedAt = rows[0].attendedAt
+            let verifiedAt = rows[0].verifiedAt
             if (!alreadyAttended) {
                 const conflictQuery = isLoopback
                     ? "SELECT name FROM students WHERE attended_at IS NOT NULL AND device_id = $1 AND identity_number != $2 LIMIT 1"
@@ -219,13 +285,138 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
                 }
 
                 const result = await client.query(
-                    "UPDATE students SET attended_at = clock_timestamp(), device_id = $2, ip_address = $3 WHERE identity_number = $1 RETURNING attended_at",
+                    "UPDATE students SET attended_at = clock_timestamp(), device_id = $2, ip_address = $3 WHERE identity_number = $1 RETURNING attended_at, verified_at",
                     [trimmedIdentity, trimmedDeviceId, clientIp || null]
                 )
                 attendedAt = result.rows[0].attended_at
+                verifiedAt = result.rows[0].verified_at
             }
             await client.query("COMMIT")
-            res.json({ name: rows[0].name, attendedAt, alreadyAttended })
+            res.json({ name: rows[0].name, attendedAt, verifiedAt, alreadyAttended })
+        } catch (error) {
+            await client.query("ROLLBACK")
+            throw error
+        } finally {
+            client.release()
+        }
+    })
+
+    app.get("/api/attendance/verification-state", async (req, res) => {
+        const { rows } = await pool.query(`
+            SELECT 
+                (verification_expires_at IS NOT NULL AND verification_expires_at > clock_timestamp()) AS "active",
+                verification_type AS "type",
+                verification_started_at AS "startedAt",
+                verification_expires_at AS "expiresAt",
+                verification_cycle_count AS "cycleCount",
+                GREATEST(0, ROUND(EXTRACT(EPOCH FROM (verification_expires_at - clock_timestamp()))))::integer AS "remainingSeconds"
+            FROM attendance_state WHERE id = 1
+        `)
+        if (!rows[0] || !rows[0].active) {
+            return res.json({
+                active: false,
+                cycleCount: rows[0]?.cycleCount ?? 0
+            })
+        }
+        const state = rows[0]
+        res.json({
+            active: true,
+            type: state.type,
+            startedAt: state.startedAt,
+            expiresAt: state.expiresAt,
+            remainingSeconds: state.remainingSeconds,
+            cycleCount: state.cycleCount
+        })
+    })
+
+    app.post("/api/attendance/verify", attendanceLimiter, async (req, res) => {
+        const identity = req.body?.identityNumber
+        const deviceId = req.body?.deviceId
+        const pin = typeof req.body?.pin === "string" ? req.body.pin.trim() : ""
+
+        if (!validIdentity(identity)) {
+            return res.status(400).json({
+                error: "Enter a valid identity number using letters, numbers, or hyphens."
+            })
+        }
+        if (!validDeviceId(deviceId)) {
+            return res.status(400).json({
+                error: "Invalid device identification. Please reload the page."
+            })
+        }
+
+        const clientIp = getClientIp(req)
+        const isLoopback = isLoopbackIp(clientIp)
+        const userAgent = req.get("user-agent") || ""
+        if (!isMobileUserAgent(userAgent) && !isLoopback) {
+            return res.status(403).json({
+                error: "Verification can only be recorded from a mobile device."
+            })
+        }
+
+        const trimmedIdentity = identity.trim()
+        const trimmedDeviceId = deviceId.trim()
+
+        const client = await pool.connect()
+        try {
+            await client.query("BEGIN")
+            const stateRes = await client.query(
+                `SELECT verification_type AS "type",
+                        verification_pin AS "pin",
+                        verification_expires_at AS "expiresAt",
+                        (verification_expires_at IS NOT NULL AND verification_expires_at > clock_timestamp()) AS "active"
+                 FROM attendance_state WHERE id = 1 FOR SHARE`
+            )
+            const state = stateRes.rows[0]
+            if (!state || !state.active) {
+                await client.query("ROLLBACK")
+                return res.status(400).json({
+                    error: "No pop check-in is currently running, or the verification window has closed."
+                })
+            }
+
+            if (state.type === "pin") {
+                if (!pin || pin !== state.pin) {
+                    await client.query("ROLLBACK")
+                    return res.status(400).json({
+                        error: "The PIN code entered is incorrect."
+                    })
+                }
+            }
+
+            const { rows } = await client.query(
+                'SELECT id, name, attended_at AS "attendedAt", verified_at AS "verifiedAt", device_id AS "deviceId", ip_address AS "ipAddress" FROM students WHERE identity_number = $1 FOR UPDATE',
+                [trimmedIdentity]
+            )
+            if (!rows[0]) {
+                await client.query("ROLLBACK")
+                return res.status(404).json({
+                    error: "This identity number is not registered."
+                })
+            }
+            if (!rows[0].attendedAt) {
+                await client.query("ROLLBACK")
+                return res.status(400).json({
+                    error: "You must check in for attendance before verifying presence."
+                })
+            }
+
+            if (rows[0].deviceId && rows[0].deviceId !== trimmedDeviceId) {
+                await client.query("ROLLBACK")
+                return res.status(403).json({
+                    error: "Verification must be submitted from the device used to check in."
+                })
+            }
+
+            const result = await client.query(
+                "UPDATE students SET verified_at = clock_timestamp(), ip_address = COALESCE($2, ip_address) WHERE identity_number = $1 RETURNING verified_at",
+                [trimmedIdentity, clientIp || null]
+            )
+            await client.query("COMMIT")
+            res.json({
+                name: rows[0].name,
+                verifiedAt: result.rows[0].verified_at
+            })
         } catch (error) {
             await client.query("ROLLBACK")
             throw error
@@ -242,10 +433,18 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
             await client.query("BEGIN")
             await client.query("SELECT id FROM attendance_state WHERE id = 1 FOR UPDATE")
             await client.query(
-                "UPDATE students SET attended_at = NULL, device_id = NULL, ip_address = NULL WHERE attended_at IS NOT NULL"
+                "UPDATE students SET attended_at = NULL, verified_at = NULL, device_id = NULL, ip_address = NULL WHERE attended_at IS NOT NULL"
             )
             const { rows } = await client.query(
-                'UPDATE attendance_state SET started_at = clock_timestamp() WHERE id = 1 RETURNING started_at AS "startedAt"'
+                `UPDATE attendance_state 
+                 SET started_at = clock_timestamp(),
+                     verification_type = NULL,
+                     verification_pin = NULL,
+                     verification_started_at = NULL,
+                     verification_expires_at = NULL,
+                     verification_cycle_count = 0
+                 WHERE id = 1 
+                 RETURNING started_at AS "startedAt"`
             )
             await client.query("COMMIT")
             res.json({ startedAt: rows[0].startedAt })

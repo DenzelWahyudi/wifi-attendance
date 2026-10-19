@@ -5,7 +5,8 @@ import { Campus, Icon } from "./Icons"
 const tones = {
     purple: { background: "bg-[#f4eff9]", color: "text-[#9a80b8]" },
     green: { background: "bg-[#edf7f0]", color: "text-[#659981]" },
-    amber: { background: "bg-[#fcf5e8]", color: "text-[#bd9b5c]" }
+    amber: { background: "bg-[#fcf5e8]", color: "text-[#bd9b5c]" },
+    rose: { background: "bg-[#fcf0f2]", color: "text-[#b04860]" }
 }
 
 function StatCard({
@@ -57,6 +58,9 @@ function StatCard({
 export function AttendanceSummary({ data }: { data: AttendanceData | null }) {
     const students = data?.students ?? []
     const present = students.filter((student) => student.attendedAt).length
+    const hasCycles = (data?.verificationCycleCount ?? 0) > 0
+    const verified = students.filter((student) => student.attendedAt && student.verifiedAt).length
+    const unverified = students.filter((student) => student.attendedAt && !student.verifiedAt).length
     const percentage = students.length ? Math.round((present / students.length) * 100) : 0
     return (
         <>
@@ -121,32 +125,68 @@ export function AttendanceSummary({ data }: { data: AttendanceData | null }) {
                     </p>
                 </div>
             </section>
-            <section
-                className="my-[17px] grid grid-cols-3 gap-[9px] md:my-[23px] md:gap-3 xl:gap-[17px]"
-                aria-label="Attendance totals"
-            >
-                <StatCard
-                    icon="users"
-                    tone="purple"
-                    label="Total students"
-                    value={data ? students.length : null}
-                    description="Registered in your workspace"
-                />
-                <StatCard
-                    icon="checkCircle"
-                    tone="green"
-                    label="Present"
-                    value={data ? present : null}
-                    description="Checked in this session"
-                />
-                <StatCard
-                    icon="clock"
-                    tone="amber"
-                    label="Not attended"
-                    value={data ? students.length - present : null}
-                    description="Still waiting to check in"
-                />
-            </section>
+            {hasCycles ? (
+                <section
+                    className="my-[17px] grid grid-cols-2 gap-[9px] md:my-[23px] md:grid-cols-4 md:gap-3 xl:gap-[17px]"
+                    aria-label="Attendance totals"
+                >
+                    <StatCard
+                        icon="users"
+                        tone="purple"
+                        label="Total students"
+                        value={data ? students.length : null}
+                        description="Registered in workspace"
+                    />
+                    <StatCard
+                        icon="checkCircle"
+                        tone="green"
+                        label="Verified"
+                        value={data ? verified : null}
+                        description="Confirmed still present"
+                    />
+                    <StatCard
+                        icon="smartphone"
+                        tone="rose"
+                        label="Unverified"
+                        value={data ? unverified : null}
+                        description="Missed pop check-in"
+                    />
+                    <StatCard
+                        icon="clock"
+                        tone="amber"
+                        label="Not attended"
+                        value={data ? students.length - present : null}
+                        description="Did not check in"
+                    />
+                </section>
+            ) : (
+                <section
+                    className="my-[17px] grid grid-cols-3 gap-[9px] md:my-[23px] md:gap-3 xl:gap-[17px]"
+                    aria-label="Attendance totals"
+                >
+                    <StatCard
+                        icon="users"
+                        tone="purple"
+                        label="Total students"
+                        value={data ? students.length : null}
+                        description="Registered in your workspace"
+                    />
+                    <StatCard
+                        icon="checkCircle"
+                        tone="green"
+                        label="Present"
+                        value={data ? present : null}
+                        description="Checked in this session"
+                    />
+                    <StatCard
+                        icon="clock"
+                        tone="amber"
+                        label="Not attended"
+                        value={data ? students.length - present : null}
+                        description="Still waiting to check in"
+                    />
+                </section>
+            )}
         </>
     )
 }

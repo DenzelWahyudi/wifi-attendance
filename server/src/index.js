@@ -28,9 +28,7 @@ async function start() {
     pool.on("error", (error) => console.error("PostgreSQL connection error:", error.message))
     try {
         const { rowCount } = await pool.query("SELECT id FROM attendance_state WHERE id = 1")
-        await pool.query("ALTER TABLE students ADD COLUMN IF NOT EXISTS device_id VARCHAR(64)")
-        await pool.query("ALTER TABLE students ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)")
-        await pool.query("SELECT identity_number, name, attended_at, device_id, ip_address FROM students LIMIT 0")
+        await pool.query("SELECT identity_number, name, attended_at, verified_at, device_id, ip_address FROM students LIMIT 0")
         if (rowCount !== 1)
             throw new Error("Attendance state is missing. Run db.sql in your database.")
     } catch (error) {

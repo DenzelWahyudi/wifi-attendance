@@ -3,8 +3,8 @@ import { AttendanceSummary } from "../components/AttendanceSummary"
 import { AttendanceTable } from "../components/AttendanceTable"
 import { DashboardLayout } from "../components/DashboardLayout"
 import { Icon } from "../components/Icons"
-import { AddStudent, ResetAttendance } from "../components/StudentDialogs"
-import { Button, ErrorNotice, IconButton } from "../components/ui"
+import { AddStudent, ResetAttendance, TriggerVerificationModal } from "../components/StudentDialogs"
+import { Button, ErrorNotice, IconButton, Spinner } from "../components/ui"
 import { api, ApiError, errorMessage, formatTime, post, type AttendanceData } from "../lib/api"
 
 export default function Dashboard({ onSignedOut }: { onSignedOut: () => void }) {
@@ -12,9 +12,10 @@ export default function Dashboard({ onSignedOut }: { onSignedOut: () => void }) 
     const [error, setError] = useState("")
     const [toast, setToast] = useState("")
     const [lastSync, setLastSync] = useState<Date | null>(null)
-    const [modal, setModal] = useState<"add" | "reset" | null>(null)
+    const [modal, setModal] = useState<"add" | "reset" | "verify" | null>(null)
     const [signingOut, setSigningOut] = useState(false)
     const [refreshing, setRefreshing] = useState(false)
+    const [stoppingVerification, setStoppingVerification] = useState(false)
     const requestNumber = useRef(0)
 
     const refresh = useCallback(
@@ -86,6 +87,19 @@ export default function Dashboard({ onSignedOut }: { onSignedOut: () => void }) 
         setRefreshing(false)
     }
 
+    async function stopVerification() {
+        setStoppingVerification(true)
+        try {
+            await post("/admin/verification/stop")
+            setToast("Pop check-in window closed.")
+            await refresh()
+        } catch (failure) {
+            setError(errorMessage(failure))
+        } finally {
+            setStoppingVerification(false)
+        }
+    }
+
     async function onSaved(message: string) {
         setModal(null)
         setToast(message)
@@ -93,6 +107,8 @@ export default function Dashboard({ onSignedOut }: { onSignedOut: () => void }) 
     }
 
     const present = data?.students.filter((student) => student.attendedAt).length ?? 0
+    const verified =
+        data?.students.filter((student) => student.attendedAt && student.verifiedAt).length ?? 0
 
     return (
         <>
@@ -109,7 +125,7 @@ export default function Dashboard({ onSignedOut }: { onSignedOut: () => void }) 
                             A clear view of your students. A simpler way to keep track.
                         </p>
                     </div>
-                    <div className="flex w-full gap-[9px] md:w-auto md:flex-col-reverse md:gap-1.5 xl:flex-row xl:gap-[9px] xl:pt-[15px]">
+                    <div className="flex w-full flex-wrap gap-[9px] md:w-auto md:flex-row md:items-center xl:gap-[9px] xl:pt-[15px]">
                         <Button
                             variant="secondary"
                             className="min-h-[39px] px-3 py-[9px] text-xs md:min-h-[33px] md:px-2.5 md:py-[7px] md:text-[11px] xl:min-h-[39px] xl:px-[13px] xl:py-[9px] xl:text-xs"
@@ -120,6 +136,15 @@ export default function Dashboard({ onSignedOut }: { onSignedOut: () => void }) 
                             Reset attendance
                         </Button>
                         <Button
+                            variant="secondary"
+                            className="min-h-[39px] border-[#c98b9e] px-3 py-[9px] text-xs text-[#872242] hover:bg-[#faf4f6] md:min-h-[33px] md:px-2.5 md:py-[7px] md:text-[11px] xl:min-h-[39px] xl:px-[13px] xl:py-[9px] xl:text-xs"
+                            onClick={() => setModal("verify")}
+                            disabled={!data || present === 0 || data.verificationActive}
+                        >
+                            <Icon name="smartphone" size={16} className="text-[#a43b5e]" />
+                            Pop check-in
+                        </Button>
+                        <Button
                             className="ml-auto min-h-[39px] px-3 py-[9px] text-xs md:ml-0 md:min-h-[33px] md:px-2.5 md:py-[7px] md:text-[11px] xl:min-h-[39px] xl:px-[13px] xl:py-[9px] xl:text-xs"
                             onClick={() => setModal("add")}
                         >
@@ -128,6 +153,60 @@ export default function Dashboard({ onSignedOut }: { onSignedOut: () => void }) 
                         </Button>
                     </div>
                 </div>
+
+                {data?.verificationActive && (
+                    <div className="mb-5 overflow-hidden rounded-xl border border-[#e5ccd3] bg-[#fbf3f5] p-4 text-[#5e2235] shadow-xs md:p-5">
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f3d7e0] text-[#9b2a4c]">
+                                    <Icon name="smartphone" size={20} />
+                                </span>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="inline-block size-2 animate-ping rounded-full bg-[#a32c4e]" />
+                                        <span className="text-[10px] font-bold tracking-wider text-[#9b2a4c] uppercase">
+                                            Pop Check-In Active
+                                        </span>
+                                    </div>
+                                    <div className="mt-0.5 text-base font-semibold text-[#441a28] md:text-lg">
+                                        {data.verificationType === "pin" ? (
+                                            <span className="flex items-center gap-2">
+                                                <span>Room PIN:</span>
+                                                <span className="rounded-md border border-[#e5b3c2] bg-white px-3 py-0.5 font-mono text-xl font-bold tracking-widest text-[#8b2343] shadow-xs">
+                                                    {data.verificationPin}
+                                                </span>
+                                            </span>
+                                        ) : (
+                                            "One-tap confirmation in progress"
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                    <div className="text-xs font-medium text-[#7d495b]">
+                                        <strong className="text-[#8b2343]">{verified}</strong> of{" "}
+                                        {present} verified
+                                    </div>
+                                    <div className="font-mono text-xs font-semibold text-[#9b2a4c]">
+                                        {Math.floor((data.verificationRemainingSeconds || 0) / 60)}:
+                                        {String((data.verificationRemainingSeconds || 0) % 60).padStart(2, "0")} remaining
+                                    </div>
+                                </div>
+                                <Button
+                                    variant="secondary"
+                                    className="min-h-[35px] border-[#d8b5c0] bg-white px-3 py-1 text-xs text-[#822a45] hover:bg-[#fff7f9]"
+                                    onClick={stopVerification}
+                                    disabled={stoppingVerification}
+                                >
+                                    {stoppingVerification ? <Spinner /> : "End early"}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <AttendanceSummary data={data} />
                 {error && (
                     <div className="mb-[18px] flex items-center gap-3.5">
@@ -185,6 +264,14 @@ export default function Dashboard({ onSignedOut }: { onSignedOut: () => void }) 
             {modal === "reset" && (
                 <ResetAttendance
                     count={present}
+                    onClose={() => setModal(null)}
+                    onSaved={onSaved}
+                    onUnauthorized={onSignedOut}
+                />
+            )}
+            {modal === "verify" && (
+                <TriggerVerificationModal
+                    presentCount={present}
                     onClose={() => setModal(null)}
                     onSaved={onSaved}
                     onUnauthorized={onSignedOut}

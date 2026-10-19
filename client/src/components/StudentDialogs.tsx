@@ -153,3 +153,131 @@ export function ResetAttendance({
         </Modal>
     )
 }
+
+export function TriggerVerificationModal({
+    presentCount,
+    onClose,
+    onSaved,
+    onUnauthorized
+}: DialogProps & { presentCount: number }) {
+    const [type, setType] = useState<"tap" | "pin">("pin")
+    const [durationSeconds, setDurationSeconds] = useState(120)
+    const [busy, setBusy] = useState(false)
+    const [error, setError] = useState("")
+
+    async function start() {
+        if (busy) return
+        setBusy(true)
+        setError("")
+        try {
+            await post("/admin/verification/start", { type, durationSeconds })
+            await onSaved(
+                `Pop check-in launched (${type === "pin" ? "PIN code" : "One-tap"}). Students have ${Math.round(durationSeconds / 60)} minutes to verify.`
+            )
+        } catch (failure) {
+            if (failure instanceof ApiError && failure.status === 401) onUnauthorized()
+            else setError(errorMessage(failure))
+            setBusy(false)
+        }
+    }
+
+    return (
+        <Modal
+            title="Launch pop check-in"
+            description="Verify that students who checked in are still physically present on the Wi-Fi."
+            onClose={onClose}
+            busy={busy}
+        >
+            <div className="mt-5 space-y-4">
+                <div>
+                    <label className="mb-2 block text-xs font-semibold text-[#514b55]">
+                        Verification method
+                    </label>
+                    <div className="grid grid-cols-2 gap-2.5">
+                        <button
+                            type="button"
+                            onClick={() => setType("pin")}
+                            className={`flex flex-col items-start gap-1 rounded-lg border p-3.5 text-left transition-all ${
+                                type === "pin"
+                                    ? "border-[#b55874] bg-[#fbf5f7] shadow-sm"
+                                    : "border-[#e5dde5] bg-white hover:bg-[#faf9fa]"
+                            }`}
+                        >
+                            <span className="flex items-center gap-1.5 text-xs font-semibold text-[#483c4f]">
+                                <Icon name="lock" size={14} className="text-[#994762]" />
+                                4-Digit PIN
+                            </span>
+                            <span className="text-[11px] leading-relaxed text-[#8a7a92]">
+                                Displays a code on your screen for students to type in.
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setType("tap")}
+                            className={`flex flex-col items-start gap-1 rounded-lg border p-3.5 text-left transition-all ${
+                                type === "tap"
+                                    ? "border-[#b55874] bg-[#fbf5f7] shadow-sm"
+                                    : "border-[#e5dde5] bg-white hover:bg-[#faf9fa]"
+                            }`}
+                        >
+                            <span className="flex items-center gap-1.5 text-xs font-semibold text-[#483c4f]">
+                                <Icon name="smartphone" size={14} className="text-[#994762]" />
+                                One-Tap Button
+                            </span>
+                            <span className="text-[11px] leading-relaxed text-[#8a7a92]">
+                                Students simply tap &ldquo;I&rsquo;m Still Here&rdquo; on their phone.
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label className="mb-2 block text-xs font-semibold text-[#514b55]">
+                        Time window
+                    </label>
+                    <div className="flex gap-2">
+                        {[
+                            { label: "60 seconds", value: 60 },
+                            { label: "2 minutes", value: 120 },
+                            { label: "3 minutes", value: 180 }
+                        ].map((item) => (
+                            <button
+                                key={item.value}
+                                type="button"
+                                onClick={() => setDurationSeconds(item.value)}
+                                className={`flex-1 rounded-[6px] border py-2 text-xs font-medium transition-colors ${
+                                    durationSeconds === item.value
+                                        ? "border-[#b55874] bg-[#fbf5f7] font-semibold text-[#8b3550]"
+                                        : "border-[#e2dcde] bg-white text-[#716477] hover:bg-[#faf8f9]"
+                                }`}
+                            >
+                                {item.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="rounded-lg border border-[#eee8ed] bg-[#faf8fa] p-3.5 text-xs text-[#7d6f83]">
+                    <p className="flex items-start gap-2">
+                        <Icon name="info" size={15} className="mt-0.5 shrink-0 text-[#a3758a]" />
+                        <span>
+                            Currently <strong>{presentCount}</strong> students have checked in. Students who fail to verify before the timer runs out will be marked as <strong>Unverified / Left Early</strong>.
+                        </span>
+                    </p>
+                </div>
+            </div>
+
+            {error && <ErrorNotice className="mt-4">{error}</ErrorNotice>}
+
+            <ModalActions>
+                <Button variant="secondary" onClick={onClose} disabled={busy}>
+                    Cancel
+                </Button>
+                <Button onClick={start} disabled={busy || presentCount === 0}>
+                    {busy ? <Spinner /> : <Icon name="checkCircle" size={16} />}
+                    {busy ? "Starting…" : "Start check-in now"}
+                </Button>
+            </ModalActions>
+        </Modal>
+    )
+}

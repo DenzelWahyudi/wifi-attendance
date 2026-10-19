@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS students (
     identity_number VARCHAR(32) NOT NULL UNIQUE
         CHECK (identity_number ~ '^[A-Za-z0-9-]{1,32}$'),
     attended_at TIMESTAMPTZ,
+    verified_at TIMESTAMPTZ,
     device_id VARCHAR(64),
     ip_address VARCHAR(45),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -21,7 +22,12 @@ CREATE TABLE IF NOT EXISTS students (
 -- One manually reset session; no attendance history is retained.
 CREATE TABLE IF NOT EXISTS attendance_state (
     id SMALLINT PRIMARY KEY CHECK (id = 1),
-    started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    verification_type VARCHAR(10),
+    verification_pin VARCHAR(6),
+    verification_started_at TIMESTAMPTZ,
+    verification_expires_at TIMESTAMPTZ,
+    verification_cycle_count INTEGER NOT NULL DEFAULT 0
 );
 
 INSERT INTO attendance_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;

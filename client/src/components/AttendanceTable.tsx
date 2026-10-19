@@ -1,11 +1,23 @@
 import { useState } from "react"
 import { twMerge } from "tailwind-merge"
-import { formatDate, formatTime, type AttendanceData } from "../lib/api"
+import { formatDate, formatTime, type AttendanceData, type Student } from "../lib/api"
 import { Icon } from "./Icons"
 import { AttendanceBadge, Button, IconButton, Input, InputGroup, Spinner } from "./ui"
 
-type Filter = "all" | "present" | "pending"
+type Filter = "all" | "present" | "verified" | "unverified" | "pending"
 const PAGE_SIZE = 8
+
+function getStudentStatus(
+    student: Student,
+    hasCycles: boolean,
+    isCycleActive: boolean
+): "verified" | "unverified" | "present" | "not_attended" {
+    if (!student.attendedAt) return "not_attended"
+    if (!hasCycles) return "present"
+    if (student.verifiedAt) return "verified"
+    if (isCycleActive) return "present"
+    return "unverified"
+}
 const avatars = [
     "bg-[#f4e9ef] text-[#a3758a]",
     "bg-[#edf1f9] text-[#7e8fac]",
@@ -37,10 +49,25 @@ export function AttendanceTable({
     const [search, setSearch] = useState("")
     const [page, setPage] = useState(1)
     const students = data?.students ?? []
+    const hasCycles = (data?.verificationCycleCount ?? 0) > 0
+    const isCycleActive = !!data?.verificationActive
+
+    const verified = students.filter((s) => s.attendedAt && s.verifiedAt).length
+    const unverified = students.filter((s) => s.attendedAt && !s.verifiedAt).length
     const present = students.filter((student) => student.attendedAt).length
+    const pending = students.length - present
+
     const filtered = students.filter((student) => {
+        const status = getStudentStatus(student, hasCycles, isCycleActive)
         const matchesStatus =
-            filter === "all" || (filter === "present" ? !!student.attendedAt : !student.attendedAt)
+            filter === "all" ||
+            (filter === "verified"
+                ? status === "verified"
+                : filter === "unverified"
+                  ? status === "unverified"
+                  : filter === "present"
+                    ? !!student.attendedAt
+                    : !student.attendedAt)
         const query = search.trim().toLowerCase()
         return (
             matchesStatus &&
@@ -52,11 +79,18 @@ export function AttendanceTable({
     const currentPage = Math.min(page, pages)
     const first = (currentPage - 1) * PAGE_SIZE
     const currentStudents = filtered.slice(first, first + PAGE_SIZE)
-    const tabs = [
-        { value: "all", label: "All students", count: students.length },
-        { value: "present", label: "Present", count: present },
-        { value: "pending", label: "Not attended", count: students.length - present }
-    ] as const
+    const tabs = hasCycles
+        ? ([
+              { value: "all", label: "All", count: students.length },
+              { value: "verified", label: "Verified", count: verified },
+              { value: "unverified", label: "Unverified / Left", count: unverified },
+              { value: "pending", label: "Not attended", count: pending }
+          ] as const)
+        : ([
+              { value: "all", label: "All students", count: students.length },
+              { value: "present", label: "Present", count: present },
+              { value: "pending", label: "Not attended", count: pending }
+          ] as const)
     const emptyTitle = !data
         ? "Let’s reconnect."
         : !students.length
@@ -260,7 +294,9 @@ export function AttendanceTable({
                                     {student.identityNumber}
                                 </td>
                                 <td className={bodyCell}>
-                                    <AttendanceBadge present={!!student.attendedAt} />
+                                    <AttendanceBadge
+                                        status={getStudentStatus(student, hasCycles, isCycleActive)}
+                                    />
                                 </td>
                                 <td className={twMerge(bodyCell, "hidden md:table-cell")}>
                                     {student.attendedAt ? (
@@ -276,6 +312,12 @@ export function AttendanceTable({
                                             <small className="mt-1 block pl-[19px] text-[9px] text-[#b2a3ba]">
                                                 {formatDate(student.attendedAt, true)}
                                             </small>
+                                            {student.verifiedAt && (
+                                                <small className="mt-0.5 flex items-center gap-1 pl-[19px] text-[9px] font-medium text-[#448163]">
+                                                    <Icon name="check" size={10} />
+                                                    Verified {formatTime(student.verifiedAt)}
+                                                </small>
+                                            )}
                                         </div>
                                     ) : (
                                         <span className="text-sm text-[#c7baca]">—</span>

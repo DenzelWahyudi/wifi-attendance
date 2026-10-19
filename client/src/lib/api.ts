@@ -39,11 +39,35 @@ export type Student = {
     name: string
     identityNumber: string
     attendedAt: string | null
+    verifiedAt?: string | null
     deviceId?: string | null
     ipAddress?: string | null
 }
-export type AttendanceData = { startedAt: string; students: Student[] }
-export type AttendanceReceipt = { name: string; attendedAt: string; alreadyAttended: boolean }
+export type AttendanceData = {
+    startedAt: string
+    verificationType?: "tap" | "pin" | null
+    verificationPin?: string | null
+    verificationStartedAt?: string | null
+    verificationExpiresAt?: string | null
+    verificationCycleCount: number
+    verificationActive: boolean
+    verificationRemainingSeconds?: number
+    students: Student[]
+}
+export type AttendanceReceipt = {
+    name: string
+    attendedAt: string
+    verifiedAt?: string | null
+    alreadyAttended: boolean
+}
+export type VerificationState = {
+    active: boolean
+    type?: "tap" | "pin"
+    startedAt?: string
+    expiresAt?: string
+    remainingSeconds?: number
+    cycleCount: number
+}
 
 export const formatDate = (date: string | Date, short = false) =>
     new Intl.DateTimeFormat("en-GB", {

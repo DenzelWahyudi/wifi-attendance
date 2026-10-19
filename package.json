@@ -7,6 +7,6 @@
         "start": "concurrently --kill-others --names server,client \"npm --prefix server start\" \"npm --prefix client run dev -- --host\""
     },
     "devDependencies": {
-        "concurrently": "^10.0.5"
+        "concurrently": "^10.0.6"
     }
 }
