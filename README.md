@@ -133,9 +133,9 @@ npm start
 ### 3. Local Wi-Fi / Classroom Access
 
 To allow students to access the portal from their mobile devices over the local Wi-Fi network:
-1. Ensure the host laptop and student mobile devices are connected to the same Wi-Fi network.
-2. Note the **Network URL** output by Vite upon starting (e.g., `http://192.168.1.X:5173`).
-3. Share this URL or display a QR code pointing to it for students to scan and check in.
+1. Ensure the host laptop and student mobile devices are connected to the same Wi-Fi network (or host mobile hotspot).
+2. Upon running `npm start`, Vite automatically renders a scannable **QR code** in the terminal alongside the resolved **Network URL** (e.g., `http://192.168.1.X:5173`).
+3. Students can scan the QR code with their mobile phone cameras to open the check-in portal instantly—no internet connection required.
 
 ---
 
