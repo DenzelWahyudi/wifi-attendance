@@ -5,6 +5,8 @@ import { Icon } from "./Icons"
 import { AttendanceBadge, Button, IconButton, Input, InputGroup, Spinner } from "./ui"
 
 type Filter = "all" | "present" | "verified" | "unverified" | "pending"
+type SortField = "name" | "identityNumber"
+type SortOrder = "asc" | "desc"
 const PAGE_SIZE = 8
 
 function getStudentStatus(
@@ -47,6 +49,8 @@ export function AttendanceTable({
 }: AttendanceTableProps) {
     const [filter, setFilter] = useState<Filter>("all")
     const [search, setSearch] = useState("")
+    const [sortField, setSortField] = useState<SortField>("identityNumber")
+    const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
     const [page, setPage] = useState(1)
     const students = data?.students ?? []
     const hasCycles = (data?.verificationCycleCount ?? 0) > 0
@@ -56,6 +60,23 @@ export function AttendanceTable({
     const unverified = students.filter((s) => s.attendedAt && !s.verifiedAt).length
     const present = students.filter((student) => student.attendedAt).length
     const pending = students.length - present
+
+    function toggleSort(field: SortField) {
+        if (sortField === field) {
+            setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+        } else {
+            setSortField(field)
+            setSortOrder("asc")
+        }
+        setPage(1)
+    }
+
+    function handleSelectSort(value: string) {
+        const [field, order] = value.split("-") as [SortField, SortOrder]
+        setSortField(field)
+        setSortOrder(order)
+        setPage(1)
+    }
 
     const filtered = students.filter((student) => {
         const status = getStudentStatus(student, hasCycles, isCycleActive)
@@ -75,10 +96,24 @@ export function AttendanceTable({
                 student.identityNumber.toLowerCase().includes(query))
         )
     })
-    const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+
+    const sorted = [...filtered].sort((a, b) => {
+        let comparison = 0
+        if (sortField === "name") {
+            comparison = a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+        } else if (sortField === "identityNumber") {
+            comparison = a.identityNumber.localeCompare(b.identityNumber, undefined, {
+                numeric: true,
+                sensitivity: "base"
+            })
+        }
+        return sortOrder === "asc" ? comparison : -comparison
+    })
+
+    const pages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
     const currentPage = Math.min(page, pages)
     const first = (currentPage - 1) * PAGE_SIZE
-    const currentStudents = filtered.slice(first, first + PAGE_SIZE)
+    const currentStudents = sorted.slice(first, first + PAGE_SIZE)
     const tabs = hasCycles
         ? ([
               { value: "all", label: "All", count: students.length },
@@ -189,31 +224,55 @@ export function AttendanceTable({
                         </button>
                     ))}
                 </div>
-                <InputGroup className="min-h-[39px] w-full gap-2 rounded-md border-[#e6e0ea] px-[11px] text-[#a89ab2] md:min-h-[35px] md:min-w-[200px] md:flex-1 lg:w-[38%] lg:max-w-[280px]">
-                    <Icon name="search" size={17} />
-                    <Input
-                        className="text-xs placeholder:text-[#b0a1b9] md:text-[11px]"
-                        aria-label="Search students"
-                        placeholder="Search name or identity number…"
-                        value={search}
-                        onChange={(event) => {
-                            setSearch(event.target.value)
-                            setPage(1)
-                        }}
-                    />
-                    {search && (
-                        <IconButton
-                            className="-mr-[5px] size-[27px]"
-                            aria-label="Clear search"
-                            onClick={() => {
-                                setSearch("")
+                <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center md:w-auto md:flex-1 md:justify-end">
+                    <InputGroup className="min-h-[39px] w-full gap-2 rounded-md border-[#e6e0ea] px-[11px] text-[#a89ab2] md:min-h-[35px] md:min-w-[190px] md:flex-1 lg:max-w-[260px]">
+                        <Icon name="search" size={17} />
+                        <Input
+                            className="text-xs placeholder:text-[#b0a1b9] md:text-[11px]"
+                            aria-label="Search students"
+                            placeholder="Search name or identity number…"
+                            value={search}
+                            onChange={(event) => {
+                                setSearch(event.target.value)
                                 setPage(1)
                             }}
-                        >
-                            <Icon name="x" size={15} />
-                        </IconButton>
-                    )}
-                </InputGroup>
+                        />
+                        {search && (
+                            <IconButton
+                                className="-mr-[5px] size-[27px]"
+                                aria-label="Clear search"
+                                onClick={() => {
+                                    setSearch("")
+                                    setPage(1)
+                                }}
+                            >
+                                <Icon name="x" size={15} />
+                            </IconButton>
+                        )}
+                    </InputGroup>
+                    <div className="relative w-full shrink-0 sm:w-auto">
+                        <label htmlFor="student-sort-select" className="sr-only">
+                            Sort students
+                        </label>
+                        <div className="relative flex items-center">
+                            <select
+                                id="student-sort-select"
+                                aria-label="Sort students"
+                                value={`${sortField}-${sortOrder}`}
+                                onChange={(e) => handleSelectSort(e.target.value)}
+                                className="h-[39px] w-full appearance-none rounded-md border border-[#e6e0ea] bg-white pr-7 pl-3 text-xs font-medium text-[#796786] transition-colors hover:border-[#d4cad9] focus-visible:outline-3 focus-visible:outline-[#bb667d] md:h-[35px] md:w-auto md:text-[11px]"
+                            >
+                                <option value="identityNumber-asc">ID Number (1 → 9)</option>
+                                <option value="identityNumber-desc">ID Number (9 → 1)</option>
+                                <option value="name-asc">Name (A → Z)</option>
+                                <option value="name-desc">Name (Z → A)</option>
+                            </select>
+                            <span className="pointer-events-none absolute right-2.5 text-[#a89ab2]">
+                                <Icon name="chevronDown" size={13} />
+                            </span>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full table-fixed border-collapse text-left md:min-w-[760px] md:table-auto">
@@ -223,6 +282,7 @@ export function AttendanceTable({
                     <thead className="border-y border-[#eeeaf2] bg-[#faf9fb]">
                         <tr>
                             <th
+                                scope="col"
                                 className={twMerge(
                                     headingCell,
                                     "hidden w-[58px] text-center md:table-cell md:pr-2 md:pl-[15px]"
@@ -230,17 +290,85 @@ export function AttendanceTable({
                             >
                                 NO.
                             </th>
-                            <th className={twMerge(headingCell, "w-[63%] md:w-auto")}>
-                                STUDENT NAME
+                            <th
+                                scope="col"
+                                aria-sort={
+                                    sortField === "name"
+                                        ? sortOrder === "asc"
+                                            ? "ascending"
+                                            : "descending"
+                                        : "none"
+                                }
+                                className={twMerge(headingCell, "w-[63%] md:w-auto")}
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => toggleSort("name")}
+                                    className="group inline-flex cursor-pointer items-center gap-1.5 text-inherit transition-colors select-none hover:text-[#872242] focus-visible:outline-2 focus-visible:outline-[#bb667d]"
+                                    aria-label={`Sort by student name, currently ${sortField === "name" ? sortOrder : "unsorted"}`}
+                                >
+                                    <span>STUDENT NAME</span>
+                                    {sortField === "name" ? (
+                                        <Icon
+                                            name={sortOrder === "asc" ? "chevronUp" : "chevronDown"}
+                                            size={12}
+                                            className="text-[#872242]"
+                                        />
+                                    ) : (
+                                        <Icon
+                                            name="chevronsUpDown"
+                                            size={12}
+                                            className="text-[#b1a2bd] opacity-0 transition-opacity group-hover:opacity-100"
+                                        />
+                                    )}
+                                </button>
                             </th>
-                            <th className={twMerge(headingCell, "hidden md:table-cell")}>
-                                IDENTITY NUMBER
+                            <th
+                                scope="col"
+                                aria-sort={
+                                    sortField === "identityNumber"
+                                        ? sortOrder === "asc"
+                                            ? "ascending"
+                                            : "descending"
+                                        : "none"
+                                }
+                                className={twMerge(headingCell, "hidden md:table-cell")}
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => toggleSort("identityNumber")}
+                                    className="group inline-flex cursor-pointer items-center gap-1.5 text-inherit transition-colors select-none hover:text-[#872242] focus-visible:outline-2 focus-visible:outline-[#bb667d]"
+                                    aria-label={`Sort by identity number, currently ${sortField === "identityNumber" ? sortOrder : "unsorted"}`}
+                                >
+                                    <span>IDENTITY NUMBER</span>
+                                    {sortField === "identityNumber" ? (
+                                        <Icon
+                                            name={sortOrder === "asc" ? "chevronUp" : "chevronDown"}
+                                            size={12}
+                                            className="text-[#872242]"
+                                        />
+                                    ) : (
+                                        <Icon
+                                            name="chevronsUpDown"
+                                            size={12}
+                                            className="text-[#b1a2bd] opacity-0 transition-opacity group-hover:opacity-100"
+                                        />
+                                    )}
+                                </button>
                             </th>
-                            <th className={headingCell}>ATTENDANCE STATUS</th>
-                            <th className={twMerge(headingCell, "hidden md:table-cell")}>
+                            <th scope="col" className={headingCell}>
+                                ATTENDANCE STATUS
+                            </th>
+                            <th
+                                scope="col"
+                                className={twMerge(headingCell, "hidden md:table-cell")}
+                            >
                                 CHECK-IN TIME
                             </th>
-                            <th className={twMerge(headingCell, "hidden lg:table-cell")}>
+                            <th
+                                scope="col"
+                                className={twMerge(headingCell, "hidden lg:table-cell")}
+                            >
                                 DEVICE / IP
                             </th>
                         </tr>
@@ -404,15 +532,15 @@ export function AttendanceTable({
             )}
             <div className="flex min-h-[53px] items-center justify-between gap-[15px] border-t border-[#eee8f1] px-[15px] py-3 text-[9px] text-[#ad9db8] md:px-[23px] md:py-[11px] md:text-[10px]">
                 <span>
-                    {filtered.length ? (
+                    {sorted.length ? (
                         <>
                             Showing{" "}
                             <strong className="font-medium text-[#8b769a]">
-                                {first + 1}–{Math.min(first + PAGE_SIZE, filtered.length)}
+                                {first + 1}–{Math.min(first + PAGE_SIZE, sorted.length)}
                             </strong>{" "}
                             of{" "}
                             <strong className="font-medium text-[#8b769a]">
-                                {filtered.length}
+                                {sorted.length}
                             </strong>{" "}
                             students
                         </>

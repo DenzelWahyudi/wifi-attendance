@@ -124,6 +124,9 @@ const paths: Record<string, ReactNode> = {
             <path d="M4 3v17h17M8 15v-4m5 4V6m5 9v-7" />
         </>
     ),
+    chevronUp: <path d="m18 15-6-6-6 6" />,
+    chevronDown: <path d="m6 9 6 6 6-6" />,
+    chevronsUpDown: <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />,
     smartphone: (
         <>
             <rect x="5" y="2" width="14" height="20" rx="3" />
