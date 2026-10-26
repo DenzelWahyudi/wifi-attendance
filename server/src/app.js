@@ -1,4 +1,6 @@
+const path = require("node:path")
 const express = require("express")
+const compression = require("compression")
 const { createHash, randomBytes, timingSafeEqual } = require("node:crypto")
 const { rateLimit } = require("express-rate-limit")
 
@@ -29,6 +31,7 @@ const isMobileUserAgent = (ua) =>
 
 function createApp({ pool, adminPassword, secureCookies = false }) {
     const app = express()
+    app.use(compression())
     app.set("trust proxy", true)
     const sessions = new Map()
     const passwordHash = hash(adminPassword)
@@ -38,6 +41,28 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
         secure: secureCookies,
         path: "/api"
     }
+
+    let verificationCache = null
+    let verificationCacheTime = 0
+    const invalidateVerificationCache = () => {
+        verificationCache = null
+        verificationCacheTime = 0
+    }
+
+    const distPath = path.resolve(__dirname, "../../client/dist")
+    app.use(
+        "/assets",
+        express.static(path.join(distPath, "assets"), {
+            maxAge: "1y",
+            immutable: true
+        })
+    )
+    app.use(
+        express.static(distPath, {
+            maxAge: "1h",
+            index: false
+        })
+    )
     app.disable("x-powered-by")
     app.use("/api", (req, res, next) => {
         res.set({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" })
@@ -166,6 +191,7 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
                 [type, pin, durationSeconds]
             )
             await client.query("COMMIT")
+            invalidateVerificationCache()
             res.json({
                 ...rows[0],
                 verificationActive: true,
@@ -189,6 +215,7 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
                        verification_expires_at AS "verificationExpiresAt",
                        verification_cycle_count AS "verificationCycleCount"`
         )
+        invalidateVerificationCache()
         res.json({
             ...rows[0],
             verificationActive: false,
@@ -292,6 +319,7 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
                 verifiedAt = result.rows[0].verified_at
             }
             await client.query("COMMIT")
+            invalidateVerificationCache()
             res.json({ name: rows[0].name, attendedAt, verifiedAt, alreadyAttended })
         } catch (error) {
             await client.query("ROLLBACK")
@@ -302,6 +330,10 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
     })
 
     app.get("/api/attendance/verification-state", async (req, res) => {
+        const now = Date.now()
+        if (verificationCache && now - verificationCacheTime < 1000) {
+            return res.json(verificationCache)
+        }
         const { rows } = await pool.query(`
             SELECT 
                 (verification_expires_at IS NOT NULL AND verification_expires_at > clock_timestamp()) AS "active",
@@ -313,20 +345,23 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
             FROM attendance_state WHERE id = 1
         `)
         if (!rows[0] || !rows[0].active) {
-            return res.json({
+            verificationCache = {
                 active: false,
                 cycleCount: rows[0]?.cycleCount ?? 0
-            })
+            }
+        } else {
+            const state = rows[0]
+            verificationCache = {
+                active: true,
+                type: state.type,
+                startedAt: state.startedAt,
+                expiresAt: state.expiresAt,
+                remainingSeconds: state.remainingSeconds,
+                cycleCount: state.cycleCount
+            }
         }
-        const state = rows[0]
-        res.json({
-            active: true,
-            type: state.type,
-            startedAt: state.startedAt,
-            expiresAt: state.expiresAt,
-            remainingSeconds: state.remainingSeconds,
-            cycleCount: state.cycleCount
-        })
+        verificationCacheTime = now
+        res.json(verificationCache)
     })
 
     app.post("/api/attendance/verify", attendanceLimiter, async (req, res) => {
@@ -413,6 +448,7 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
                 [trimmedIdentity, clientIp || null]
             )
             await client.query("COMMIT")
+            invalidateVerificationCache()
             res.json({
                 name: rows[0].name,
                 verifiedAt: result.rows[0].verified_at
@@ -447,6 +483,7 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
                  RETURNING started_at AS "startedAt"`
             )
             await client.query("COMMIT")
+            invalidateVerificationCache()
             res.json({ startedAt: rows[0].startedAt })
         } catch (error) {
             await client.query("ROLLBACK")
@@ -457,6 +494,14 @@ function createApp({ pool, adminPassword, secureCookies = false }) {
     })
 
     app.use("/api", (req, res) => res.status(404).json({ error: "This endpoint does not exist." }))
+
+    app.use((req, res, next) => {
+        if (req.method !== "GET" && req.method !== "HEAD") return next()
+        const indexPath = path.join(distPath, "index.html")
+        res.sendFile(indexPath, (err) => {
+            if (err) next()
+        })
+    })
 
     app.use((error, req, res, next) => {
         if (res.headersSent) return next(error)

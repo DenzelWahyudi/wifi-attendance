@@ -1,12 +1,44 @@
 const path = require("node:path")
+const { networkInterfaces } = require("node:os")
 const { loadEnvFile } = require("node:process")
 const { Pool } = require("pg")
+const { renderUnicodeCompact } = require("uqr")
 const { createApp } = require("./app")
 
 try {
     loadEnvFile(path.join(__dirname, "../.env"))
 } catch (error) {
     if (error.code !== "ENOENT") throw error
+}
+
+function getPreferredNetworkIp() {
+    const interfaces = networkInterfaces()
+    let wifiIp = null
+    let ethernetIp = null
+    let fallbackIp = null
+
+    for (const [name, addrs] of Object.entries(interfaces)) {
+        if (!addrs) continue
+        for (const addr of addrs) {
+            const isIpv4 = addr.family === "IPv4" || addr.family === 4
+            if (!isIpv4 || addr.internal) continue
+
+            const lower = name.toLowerCase()
+            const isVirtual =
+                /vethernet|wsl|virtual|vbox|docker|tailscale|zerotier|loopback/i.test(lower)
+
+            if (/wi-fi|wlan|wireless|airport/i.test(lower)) {
+                wifiIp = addr.address
+                break
+            } else if (!isVirtual && /ethernet|eth|en\d/i.test(lower) && !ethernetIp) {
+                ethernetIp = addr.address
+            } else if (!isVirtual && !fallbackIp) {
+                fallbackIp = addr.address
+            }
+        }
+        if (wifiIp) break
+    }
+    return wifiIp || ethernetIp || fallbackIp
 }
 
 async function start() {
@@ -24,7 +56,7 @@ async function start() {
     if (!process.env.PGHOST || !process.env.PGDATABASE || !process.env.PGUSER) {
         throw new Error("Fill in the PostgreSQL connection settings in server/.env first.")
     }
-    const pool = new Pool({ connectionTimeoutMillis: 5000, max: 10 })
+    const pool = new Pool({ connectionTimeoutMillis: 10000, max: 35 })
     pool.on("error", (error) => console.error("PostgreSQL connection error:", error.message))
     try {
         const { rowCount } = await pool.query("SELECT id FROM attendance_state WHERE id = 1")
@@ -41,8 +73,20 @@ async function start() {
         secureCookies: process.env.COOKIE_SECURE === "true"
     })
     const port = Number(process.env.PORT || 3000)
-    const server = app.listen(port, "localhost", () => {
-        console.log(`Attendance API ready at http://localhost:${port}`)
+    const server = app.listen(port, "0.0.0.0", () => {
+        const ip = getPreferredNetworkIp()
+        const localUrl = `http://localhost:${port}`
+        const networkUrl = ip ? `http://${ip}:${port}` : null
+
+        console.log(`\n  UNTAR Attendance System ready!`)
+        console.log(`  > Local:   ${localUrl}`)
+        if (networkUrl) {
+            console.log(`  > Network: ${networkUrl}`)
+            console.log(`\n  📱 Scan on mobile to check in:\n`)
+            const qr = renderUnicodeCompact(networkUrl, { border: 2 })
+            console.log(qr.split("\n").map((line) => `    ${line}`).join("\n"))
+            console.log("")
+        }
     })
     server.on("error", (error) => {
         if (error.code === "EADDRINUSE") {

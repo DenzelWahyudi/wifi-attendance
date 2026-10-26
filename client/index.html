@@ -10,11 +10,55 @@
             content="A simpler way to be present. UNTAR student attendance portal."
         />
         <title>UNTAR · Attendance</title>
+        <style>
+            #app-loader {
+                display: flex;
+                min-height: 100svh;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                background-color: #fbf9f5;
+                color: #302930;
+                text-align: center;
+                padding: 24px;
+                box-sizing: border-box;
+            }
+            .app-spinner {
+                width: 38px;
+                height: 38px;
+                border: 3.5px solid #ebd5da;
+                border-top-color: #861b35;
+                border-radius: 50%;
+                animation: spin 0.75s cubic-bezier(0.6, 0.2, 0.4, 0.8) infinite;
+                margin-bottom: 20px;
+            }
+            .app-title {
+                font-size: 17px;
+                font-weight: 600;
+                letter-spacing: 0.2px;
+                color: #861b35;
+                margin-bottom: 6px;
+            }
+            .app-subtitle {
+                font-size: 13px;
+                color: #77757d;
+            }
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+        </style>
     </head>
     <body
         class="bg-canvas text-ink min-w-[320px] font-sans antialiased [font-synthesis:none] [text-rendering:optimizeLegibility] has-[dialog[open]]:overflow-hidden"
     >
-        <div id="root"></div>
+        <div id="root">
+            <div id="app-loader">
+                <div class="app-spinner" aria-hidden="true"></div>
+                <div class="app-title">UNTAR · Attendance</div>
+                <div class="app-subtitle">Connecting to session…</div>
+            </div>
+        </div>
         <script type="module" src="/src/main.tsx"></script>
     </body>
 </html>

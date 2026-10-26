@@ -118,23 +118,23 @@ Install all dependencies for root, server, and client with a single command:
 npm install
 ```
 
-### 2. Start the Development Server
+### 2. Start the Attendance Server
 
-Start both the backend API and frontend Vite server together:
+Build the client bundle and start the unified production server:
 
 ```powershell
 npm start
 ```
 
-- **Student Check-In**: `http://localhost:5173`
-- **Admin Portal**: `http://localhost:5173/admin`
+- **Student Check-In**: `http://localhost:3000` (or your local network IP)
+- **Admin Portal**: `http://localhost:3000/admin`
 - **Backend API**: `http://localhost:3000/api`
 
 ### 3. Local Wi-Fi / Classroom Access
 
 To allow students to access the portal from their mobile devices over the local Wi-Fi network:
-1. Ensure the host laptop and student mobile devices are connected to the same Wi-Fi network (or host mobile hotspot).
-2. Upon running `npm start`, Vite automatically renders a scannable **QR code** in the terminal alongside the resolved **Network URL** (e.g., `http://192.168.1.X:5173`).
+1. Ensure the host laptop and student mobile devices are connected to the same Wi-Fi network (a dedicated Wi-Fi router or campus Access Point is recommended for 40+ students).
+2. Upon running `npm start`, the server automatically renders a scannable **QR code** in the terminal alongside the resolved **Network URL** (e.g., `http://192.168.1.X:3000`).
 3. Students can scan the QR code with their mobile phone cameras to open the check-in portal instantly—no internet connection required.
 
 ---
@@ -142,7 +142,8 @@ To allow students to access the portal from their mobile devices over the local 
 ## Scripts & Checks
 
 From the project root:
-- `npm start`: Runs both backend and frontend concurrently.
+- `npm start`: Builds the frontend and starts the high-performance unified server on port 3000.
+- `npm run dev`: Runs backend watcher and Vite dev server concurrently for development.
 
 From `client`:
 - `npm run build`: Type-checks and builds the production bundle (`tsc -b && vite build`).

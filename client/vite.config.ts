@@ -51,7 +51,6 @@ function terminalQrcode(
         apply: "serve",
         configureServer(server: ViteDevServer) {
             const originalListen = server.listen
-            // @ts-expect-error override listen to hook server listening event
             server.listen = function (...args: unknown[]) {
                 const isRestart = args[1] === true
                 if (!isRestart) {
